@@ -13,7 +13,6 @@ def file_path_creation(directory_path):
         paths.append(directory_path + '/' + name)
    
     return paths 
-
 def data_creation(code15_data_path):
     """
     This function creates a database for the code15 data by reading .hea files from the specified directory.
@@ -76,8 +75,23 @@ def data_creation(code15_data_path):
     code_15_df = pd.DataFrame(code_15_df_rows)
 
     return code_15_ECG, code_15_df
-''''
-def data_creation(code15_data_path): 
+
+def pad_tensor(tensor, target_size=1568):
+    """Pads the tensor to the target size."""
+    if tensor.size(1) < target_size:
+        padding = target_size - tensor.size(1)
+        tensor = F.pad(tensor, (0, 0, 0, padding), mode='constant', value=0)
+    return tensor
+
+def cut_tensor(tensor, tensor_max_dimension = 1568):
+
+    if tensor.size(1) > tensor_max_dimension: 
+
+        tensor = tensor[:,:tensor_max_dimension,:]
+    return tensor 
+
+
+def data_creation2(code15_data_path):
     """
     This function creates a database for the code15 data by reading .hea files from the specified directory.
 
@@ -85,19 +99,16 @@ def data_creation(code15_data_path):
     code15_data_path (str): The path to the directory containing exam parts.
 
     Returns:
-    list: A list containing the signals from the records.
+    tuple: A tuple containing the tensor of signals and a DataFrame of metadata.
     """
-    code_15_ECG = []
-    code_15_ECG = torch.tensor(code_15_ECG)
-    code_15_df = pd.DataFrame(columns = ['Age','Sex','Label'])
-    print('ciao')
-
+    code_15_df_rows = []  # List to collect DataFrame data
+    all_tensors = []      # List to accumulate tensors
+    all_tensors_not_padded = []
     # Check if the path exists
     if not os.path.exists(code15_data_path):
         raise FileNotFoundError(f"The specified path does not exist: {code15_data_path}")
 
     exam_parts = os.listdir(code15_data_path)
-    print(exam_parts)
 
     # Use tqdm to show progress for exam parts
     for exam_part in tqdm(exam_parts, desc="Processing exam parts"):
@@ -112,28 +123,38 @@ def data_creation(code15_data_path):
         # Use tqdm to show progress for files
         for file_of_exam_part in tqdm(files_of_exam_part, desc=f"Processing files in {exam_part}", leave=False):
             record_path = os.path.join(exam_part_record_path, file_of_exam_part.replace(".hea", ""))
-            
+
             try:
                 record = wfdb.rdrecord(record_path)
-                tensor = torch.tensor(record.p_signal)
-                tensor = torch.unsqueeze(tensor,axis=0)
-                if tensor.size(1) < 4096:
-                        padding = 4096 - tensor.size(1)
-                        tensor = F.pad(tensor, (0,0,0,padding), mode='constant', value=0)
-
-                code_15_ECG = torch.cat((code_15_ECG, tensor),axis = 0)
-                new_row = {'Age': int(record.comments[0].replace("Age: ","")), 'Sex': record.comments[1].replace('Sex: ',""), 'Label':record.comments[2].replace("Chagas label: ","")}
-                code_15_df.loc[len(code_15_df)] = new_row
+                tensor = torch.tensor(record.p_signal, dtype=torch.float32)
+                tensor = torch.unsqueeze(tensor,0)
                 
+                # cutting if necessary
+                tensor = cut_tensor(tensor)
+                tensor = pad_tensor(tensor)
                 
 
+                all_tensors.append(tensor)  # Accumulate tensors
+
+                # Collect data for the DataFrame
+                new_row = {
+                    'Age': int(record.comments[0].replace("Age: ", "")),
+                    'Sex': record.comments[1].replace('Sex: ', ""),
+                    'Label': record.comments[2].replace("Chagas label: ", "")
+                }
+                code_15_df_rows.append(new_row)
 
             except Exception as e:
                 print(f"Error reading record {record_path}: {e}")
 
+    # Concatenate all tensors once
+    code_15_ECG = torch.cat(all_tensors, dim=0) if all_tensors else torch.empty(0)
+
+    # Create the final DataFrame
+    code_15_df = pd.DataFrame(code_15_df_rows)
+
     return code_15_ECG, code_15_df
 
-'''
 
 def db_preparation(db): 
 
@@ -166,8 +187,27 @@ def load_data(dir_for_loading):
     df = pd.read_csv(dir_for_loading + '/db.csv')
     with open(dir_for_loading+'/comments.txt','r') as f: 
         comments = f.read()
-    with open(dir_for_loading + '/ ECG.pkl', 'rb') as f: 
+    with open(dir_for_loading + '/ECG.pkl', 'rb') as f: 
         pickle_data = pickle.load(f)
 
     print(comments)
     return pickle_data,df
+
+def save_training_set(training_set,labels,saving_path): 
+    now=datetime.now()    
+    date_time_string = now.strftime("%Y-%m-%d %H%M%S")
+    comments = input("Insert the comments")
+    saving_path = saving_path + '/' +date_time_string + '/'
+    os.makedirs(os.path.dirname(saving_path), exist_ok=True)
+    with open(saving_path + 'comments.txt','w') as f: 
+        f.write(comments)
+    with open(saving_path + 'training_set.pkl','wb') as f: 
+        pickle.dump(training_set,f)
+    np.savetxt(saving_path + 'labels.csv',labels,delimiter=',')
+    print("Saved succesfully")
+
+def load_training_set(loading_path):
+    
+
+
+    return training_set, labels
