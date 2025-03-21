@@ -5,8 +5,11 @@ import pandas as pd
 from datetime import datetime
 import pickle 
 import torch 
+import torch.nn as nn
 import torch.nn.functional as F
-
+import torch.optim as optim 
+import numpy as np
+import csv 
 def file_path_creation(directory_path): 
     paths = []
     for name in os.listdir(directory_path):
@@ -203,11 +206,37 @@ def save_training_set(training_set,labels,saving_path):
         f.write(comments)
     with open(saving_path + 'training_set.pkl','wb') as f: 
         pickle.dump(training_set,f)
-    np.savetxt(saving_path + 'labels.csv',labels,delimiter=',')
+    np.save(saving_path + 'labels.npy',labels)
     print("Saved succesfully")
 
 def load_training_set(loading_path):
-    
+    if not os.path.exists(loading_path):
+        raise FileNotFoundError(f"la directory {loading_path} non esiste.")
+    labels = np.load(loading_path + '/labels.npy')
+    with open(loading_path + '/training_set.pkl','rb') as f: 
+        training_set = pickle.load(f)
+    with open(loading_path+'/comments.txt','r') as f: 
+        comments = f.read()
+    print(comments)
+
 
 
     return training_set, labels
+
+class TimeSeriesCNN(nn.Module):
+    def __init__(self, num_classes):
+        super(TimeSeriesCNN, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=12, out_channels=32, kernel_size=3, stride=1,padding=0)
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1,padding=0)
+        self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(64 * 390, 128)  # Adjust based on input size
+        self.fc2 = nn.Linear(128, 1)  # Single output for binary classification
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # Change shape to (batch_size, channels, sequence_length)
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = F.relu(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))  # Use sigmoid for binary classification
+        return x
