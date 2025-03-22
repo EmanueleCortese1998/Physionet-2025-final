@@ -222,7 +222,7 @@ def load_training_set(loading_path):
 
 
     return training_set, labels
-
+''''
 class TimeSeriesCNN(nn.Module):
     def __init__(self, num_classes):
         super(TimeSeriesCNN, self).__init__()
@@ -239,4 +239,69 @@ class TimeSeriesCNN(nn.Module):
         x = x.view(x.size(0), -1)  # Flatten the tensor
         x = F.relu(self.fc1(x))
         x = torch.sigmoid(self.fc2(x))  # Use sigmoid for binary classification
+        return x
+
+class TimeSeriesCNN(nn.Module):
+    def __init__(self, num_classes, kernel_size=3):
+        super(TimeSeriesCNN, self).__init__()
+        self.kernel_size = kernel_size
+        self.conv1 = nn.Conv1d(in_channels=12, out_channels=32, kernel_size=self.kernel_size, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm1d(32)
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=self.kernel_size, stride=1, padding=0)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(0.5)
+
+        # Placeholder per le dimensioni dell'output
+        self.fc1 = None
+        self.fc2 = nn.Linear(128, num_classes)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # Cambia la forma in (batch_size, channels, sequence_length)
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))
+        x = x.view(x.size(0), -1)  # Appiattire il tensore
+
+        if self.fc1 is None:
+            # Calcola dinamicamente la dimensione dell'input per il layer fc1
+            input_size = x.size(1)
+            self.fc1 = nn.Linear(input_size, 128)
+        
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = torch.sigmoid(self.fc2(x))  # Usa sigmoid per la classificazione binaria
+
+        return x'
+        '''''
+
+class TimeSeriesCNN(nn.Module):
+    def __init__(self, num_classes):
+        super(TimeSeriesCNN, self).__init__()
+        
+        # Convoluzione con kernel grande
+        self.conv1 = nn.Conv1d(in_channels=12, out_channels=32, kernel_size=128, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm1d(32)
+        
+        # Convoluzione con kernel più piccolo
+        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=64, stride=1, padding=0)
+        self.bn2 = nn.BatchNorm1d(64)
+
+        # Terza convoluzione con kernel ancora più piccolo
+        self.conv3 = nn.Conv1d(in_channels=64, out_channels=128, kernel_size=32, stride=1, padding=0)
+        self.bn3 = nn.BatchNorm1d(128)
+
+        self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
+
+        # Imposta direttamente la dimensione di input per fc1
+        self.fc1 = nn.Linear(128 * 15, 128)  # Sostituisci 15 con la dimensione appropriata
+        self.fc2 = nn.Linear(128, num_classes)  # Output per la classificazione
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)  # Cambia la forma in (batch_size, channels, sequence_length)
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))
+        x = self.pool(F.relu(self.bn3(self.conv3(x))))
+        x = x.view(x.size(0), -1)  # Appiattire il tensore
+        x = F.relu(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))  # Usa sigmoid per la classificazione binaria
         return x
